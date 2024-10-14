@@ -1,0 +1,6 @@
+---
+- name: Container lifecycle test playbook
+  hosts: localhost
+  remote_user: root
+  roles:
+    - container_lifecycle
