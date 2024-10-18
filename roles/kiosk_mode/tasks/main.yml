@@ -55,9 +55,14 @@
     permanent: true
     state: enabled
 
+- name: Vary kiosk package for RHEL9
+  ansible.builtin.set_fact:
+    kiosk_package: gnome-kiosk-script-session
+  when: ansible_distribution_major_version == "9"
+
 - name: Install yum install gnome-session-kiosk-session
   ansible.builtin.yum:
-    name: gnome-session-kiosk-session
+    name: "{{ kiosk_package }}"
     state: present
   notify: Reboot
 
