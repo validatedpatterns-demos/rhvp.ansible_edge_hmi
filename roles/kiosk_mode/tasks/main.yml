@@ -68,7 +68,7 @@
     src: custom.conf.j2
     dest: /etc/gdm/custom.conf
     mode: "0644"
-  notify: Reboot
+  notify: Restart GDM
 
 - name: Ensure kiosk group exists
   ansible.builtin.group:
@@ -87,7 +87,6 @@
     groups: users
     create_home: true
     skeleton: true
-  notify: Reboot
 
 - name: Clear kiosk user password for GDM autologin
   ansible.builtin.command:
@@ -95,7 +94,6 @@
   register: kiosk_password_clear
   changed_when: kiosk_password_clear.rc == 0
   failed_when: kiosk_password_clear.rc != 0
-  notify: Reboot
 
 - name: Change default target to graphical.target
   ansible.builtin.file:
@@ -109,7 +107,6 @@
     name: gdm
     enabled: true
     state: started
-  notify: Reboot
 
 - name: Permit traffic in default zone for https service
   ansible.posix.firewalld:
@@ -131,7 +128,6 @@
     - /home/kiosk/.cache
     - /home/kiosk/.mozilla
     - /home/kiosk/.local/state
-  notify: Reboot
 
 - name: Disable GNOME initial setup for kiosk user
   ansible.builtin.file:
@@ -149,7 +145,6 @@
     src: gnome-initial-setup.j2
     dest: /etc/dconf/db/local.d/00-gnome-initial-setup
     mode: "0644"
-  notify: Reboot
 
 - name: Apply dconf changes
   ansible.builtin.command:
@@ -173,14 +168,13 @@
     mode: "0755"
     owner: kiosk
     group: kiosk
-  notify: Reboot
 
 - name: Configure session for kiosk username /var/lib/AccountsService/users/kiosk
   ansible.builtin.template:
     src: kiosk.conf.j2
     dest: /var/lib/AccountsService/users/kiosk
     mode: "0600"
-  notify: Reboot
+  notify: Restart GDM
 
 - name: Ensure kiosk home directory ownership
   ansible.builtin.file:
@@ -189,7 +183,6 @@
     owner: kiosk
     group: kiosk
     recurse: true
-  notify: Reboot
 
-- name: Flush handlers (will reboot if needed)
+- name: Flush handlers (reboot or restart GDM if needed)
   ansible.builtin.meta: flush_handlers
