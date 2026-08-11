@@ -5,6 +5,10 @@ kiosk_port: 8088
 # When false, skip reboot and GDM restart handlers (useful for iterative runs).
 kiosk_reboot: true
 
+# HTTP path polled before launching Firefox. Override for app-specific
+# readiness endpoints (e.g. /StatusPing for Ignition).
+kiosk_ready_path: /
+
 # RHEL 8 kiosk packages and session configuration.
 kiosk_packages:
   - gnome-session-kiosk-session

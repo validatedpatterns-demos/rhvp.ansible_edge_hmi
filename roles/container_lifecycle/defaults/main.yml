@@ -13,8 +13,14 @@ container_tag: ""
 
 container_port_mapping: ""
 
-container_healthcheck: ""
+container_healthcheck_cmd: ""
 
 container_healthcheck_interval: 30s
 
 container_healthcheck_retries: 5
+
+container_healthcheck_on_failure: kill
+
+container_healthcheck_start_period: 120s
+
+container_healthcheck_timeout: 5s
