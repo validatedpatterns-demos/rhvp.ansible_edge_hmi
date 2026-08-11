@@ -2,6 +2,10 @@
 # defaults file for kiosk_mode
 kiosk_port: 8088
 
+# HTTP path polled before launching Firefox. Override for app-specific
+# readiness endpoints (e.g. /StatusPing for Ignition).
+kiosk_ready_path: /
+
 # RHEL 8 kiosk packages and session configuration.
 kiosk_packages:
   - gnome-session-kiosk-session
