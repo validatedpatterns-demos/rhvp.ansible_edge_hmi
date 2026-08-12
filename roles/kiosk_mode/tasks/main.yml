@@ -89,6 +89,11 @@
     state: latest
     update_cache: true
 
+- name: Refresh dnf metadata after system upgrade
+  ansible.builtin.command:
+    cmd: dnf -y makecache
+  changed_when: false
+
 - name: Install Gnome Desktop Environment
   ansible.builtin.dnf:
     name:
@@ -99,10 +104,34 @@
   notify: Reboot
 
 - name: Install kiosk session packages
-  ansible.builtin.dnf:
-    name: "{{ kiosk_packages + kiosk_runtime_packages }}"
-    state: present
-  notify: Reboot
+  block:
+    - name: Clean stale dnf package cache before kiosk install
+      ansible.builtin.command:
+        cmd: dnf -y clean packages
+      changed_when: false
+
+    - name: Install kiosk session packages with dnf
+      ansible.builtin.dnf:
+        name: "{{ kiosk_packages + kiosk_runtime_packages }}"
+        state: present
+        update_cache: true
+      notify: Reboot
+  rescue:
+    - name: Clean dnf package cache after failed kiosk install
+      ansible.builtin.command:
+        cmd: dnf -y clean packages
+      changed_when: false
+
+    - name: Refresh dnf metadata after cache clean
+      ansible.builtin.command:
+        cmd: dnf -y makecache
+      changed_when: false
+
+    - name: Retry kiosk session package install
+      ansible.builtin.dnf:
+        name: "{{ kiosk_packages + kiosk_runtime_packages }}"
+        state: present
+      notify: Reboot
 
 - name: Check for split wayland kiosk session desktop file
   ansible.builtin.stat:
