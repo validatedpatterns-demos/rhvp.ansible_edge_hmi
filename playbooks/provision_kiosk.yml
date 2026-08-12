@@ -17,9 +17,6 @@
     container_healthcheck_retries: 5
     container_healthcheck_start_period: 120s
   tasks:
-    - name: Start Ignition container before configuring kiosk session
-      ansible.builtin.import_role:
-        name: container_lifecycle
-    - name: Configure kiosk mode on hmi devices
+    - name: Configure kiosk mode and start Ignition on hmi devices
       ansible.builtin.import_role:
         name: kiosk_mode

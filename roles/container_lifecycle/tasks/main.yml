@@ -3,6 +3,11 @@
 
 # FIXME: properly handle template config changes
 
+- name: Install podman
+  ansible.builtin.dnf:
+    name: podman
+    state: present
+
 - name: Gather information about the current running container
   containers.podman.podman_container_info:
     name: afiot-{{ service_name }}

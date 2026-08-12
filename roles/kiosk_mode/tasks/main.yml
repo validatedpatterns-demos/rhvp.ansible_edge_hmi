@@ -22,6 +22,11 @@
     password: "{{ rhsm_password }}"
     auto_attach: "{{ rhsm_auto_attach }}"
 
+- name: Install podman for application containers
+  ansible.builtin.dnf:
+    name: podman
+    state: present
+
 - name: Ensure kiosk_mode state directory
   ansible.builtin.file:
     path: "{{ kiosk_state_dir }}"
@@ -343,6 +348,10 @@
   changed_when: true
   notify: Reboot
   when: kiosk_needs_first_gui_reboot | bool
+
+- name: Ensure Ignition container is running before kiosk session handlers
+  ansible.builtin.import_role:
+    name: container_lifecycle
 
 - name: Flush handlers (reboot or restart GDM if needed)
   ansible.builtin.meta: flush_handlers
