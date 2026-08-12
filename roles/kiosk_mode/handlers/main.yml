@@ -8,8 +8,20 @@
   ansible.builtin.reboot:
   when: kiosk_reboot | bool
 
+- name: Check whether kiosk user has an active session
+  ansible.builtin.shell: |
+    set -o pipefail
+    loginctl list-sessions --no-legend 2>/dev/null | awk '$3 == "kiosk" { found = 1 } END { exit found ? 0 : 1 }'
+  register: kiosk_has_active_session
+  changed_when: false
+  failed_when: false
+  listen: Restart GDM
+
 - name: Restart GDM
   ansible.builtin.systemd:
     name: gdm
     state: restarted
-  when: kiosk_reboot | bool
+  when:
+    - kiosk_reboot | bool
+    - kiosk_has_active_session.rc != 0
+  listen: Restart GDM

@@ -161,10 +161,18 @@
     create_home: true
     skeleton: true
 
+- name: Check whether kiosk user has a password set
+  ansible.builtin.command:
+    cmd: passwd -S kiosk
+  register: kiosk_password_status
+  changed_when: false
+  failed_when: kiosk_password_status.rc != 0
+
 - name: Clear kiosk user password for GDM autologin
   ansible.builtin.command:
     cmd: passwd -d kiosk
   register: kiosk_password_clear
+  when: kiosk_password_status.stdout.split()[1] != 'NP'
   changed_when: kiosk_password_clear.rc == 0
   failed_when: kiosk_password_clear.rc != 0
 
@@ -205,7 +213,7 @@
 - name: Disable GNOME initial setup for kiosk user
   ansible.builtin.file:
     path: "{{ item }}"
-    state: touch
+    state: file
     mode: "0644"
     owner: kiosk
     group: kiosk
@@ -218,10 +226,12 @@
     src: gnome-initial-setup.j2
     dest: /etc/dconf/db/local.d/00-gnome-initial-setup
     mode: "0644"
+  register: kiosk_gnome_initial_setup
 
 - name: Apply dconf changes
   ansible.builtin.command:
     cmd: dconf update
+  when: kiosk_gnome_initial_setup is changed
   changed_when: true
 
 - name: Remove persisted desktop session overrides for kiosk user
@@ -311,6 +321,4 @@
     path: "{{ kiosk_first_gui_reboot_marker }}"
     state: touch
     mode: "0644"
-  when:
-    - ansible_facts['distribution_major_version'] | int >= 9
-    - kiosk_reboot | bool
+  when: kiosk_needs_first_gui_reboot | bool
