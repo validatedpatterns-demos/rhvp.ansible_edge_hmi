@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically check for a kiosk graphical session
+
+[Timer]
+OnBootSec={{ kiosk_session_watchdog_boot_delay_sec }}
+OnUnitActiveSec={{ kiosk_session_watchdog_interval_sec }}
+Unit=kiosk-session-watchdog.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

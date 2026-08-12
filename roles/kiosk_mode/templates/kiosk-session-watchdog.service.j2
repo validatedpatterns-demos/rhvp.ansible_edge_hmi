@@ -1,0 +1,9 @@
+[Unit]
+Description=Recover missing kiosk GDM session
+Documentation=file:///usr/local/libexec/kiosk-session-watchdog
+After=graphical.target gdm.service
+Requires=gdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/kiosk-session-watchdog

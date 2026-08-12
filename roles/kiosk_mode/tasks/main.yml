@@ -22,6 +22,62 @@
     password: "{{ rhsm_password }}"
     auto_attach: "{{ rhsm_auto_attach }}"
 
+- name: Ensure kiosk_mode state directory
+  ansible.builtin.file:
+    path: "{{ kiosk_state_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Check first GUI reboot marker
+  ansible.builtin.stat:
+    path: "{{ kiosk_first_gui_reboot_marker }}"
+  register: kiosk_first_gui_reboot
+
+- name: Set whether RHEL 9+ still needs a first GUI reboot
+  ansible.builtin.set_fact:
+    kiosk_needs_first_gui_reboot: >-
+      {{
+        (ansible_facts['distribution_major_version'] | int >= 9)
+        and (not kiosk_first_gui_reboot.stat.exists)
+        and (kiosk_reboot | bool)
+      }}
+
+- name: Measure /boot usage percent
+  ansible.builtin.command:
+    cmd: df -P /boot
+  register: kiosk_boot_df
+  changed_when: false
+
+- name: Parse /boot usage percent
+  ansible.builtin.set_fact:
+    kiosk_boot_usage_percent: >-
+      {{
+        kiosk_boot_df.stdout_lines[1].split()[4] | regex_replace('%', '') | int
+      }}
+
+- name: Set installonly_limit in dnf.conf
+  ansible.builtin.lineinfile:
+    path: /etc/dnf/dnf.conf
+    regexp: '^installonly_limit='
+    line: "installonly_limit={{ kiosk_installonly_limit }}"
+    insertafter: '^\[main\]'
+    mode: "0644"
+
+- name: Remove older installonly packages when /boot is constrained
+  ansible.builtin.command:
+    cmd: dnf -y remove --oldinstallonly
+  register: kiosk_oldinstallonly
+  when: kiosk_boot_usage_percent | int >= kiosk_boot_usage_threshold | int
+  failed_when:
+    - kiosk_oldinstallonly.rc != 0
+    - "'No packages' not in (kiosk_oldinstallonly.stdout | default(''))"
+    - "'Nothing to do' not in (kiosk_oldinstallonly.stdout | default(''))"
+    - "'No match' not in (kiosk_oldinstallonly.stderr | default(''))"
+  changed_when: >-
+    kiosk_oldinstallonly.rc == 0
+    and ('Nothing to do' not in (kiosk_oldinstallonly.stdout | default('')))
+    and ('No packages' not in (kiosk_oldinstallonly.stdout | default('')))
+
 - name: Upgrade all packages
   ansible.builtin.dnf:
     name: "*"
@@ -35,6 +91,7 @@
     skip_broken: true
     nobest: true
     state: present
+  notify: Reboot
 
 - name: Install kiosk session packages
   ansible.builtin.dnf:
@@ -63,12 +120,28 @@
       }}
   when: ansible_facts['distribution_major_version'] | int >= 9
 
+- name: Verify selected kiosk session desktop file exists
+  ansible.builtin.stat:
+    path: "/usr/share/wayland-sessions/{{ kiosk_session }}.desktop"
+  register: kiosk_selected_session
+  when: ansible_facts['distribution_major_version'] | int >= 9
+
+- name: Fail when selected kiosk session desktop file is missing
+  ansible.builtin.fail:
+    msg: >-
+      Selected kiosk session '{{ kiosk_session }}' has no desktop file at
+      /usr/share/wayland-sessions/{{ kiosk_session }}.desktop.
+      Install gnome-kiosk-script-session (or equivalent) before configuring GDM.
+  when:
+    - ansible_facts['distribution_major_version'] | int >= 9
+    - not kiosk_selected_session.stat.exists
+
 - name: Create gdm configuration for kiosk kiosk_mode
   ansible.builtin.template:
     src: custom.conf.j2
     dest: /etc/gdm/custom.conf
     mode: "0644"
-  notify: Restart GDM
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
 
 - name: Ensure kiosk group exists
   ansible.builtin.group:
@@ -174,7 +247,7 @@
     src: kiosk.conf.j2
     dest: /var/lib/AccountsService/users/kiosk
     mode: "0600"
-  notify: Restart GDM
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
 
 - name: Ensure kiosk home directory ownership
   ansible.builtin.file:
@@ -184,5 +257,60 @@
     group: kiosk
     recurse: true
 
+- name: Install kiosk session watchdog script
+  ansible.builtin.template:
+    src: kiosk-session-watchdog.sh.j2
+    dest: /usr/local/libexec/kiosk-session-watchdog
+    mode: "0755"
+  when: kiosk_session_watchdog | bool
+
+- name: Install kiosk session watchdog unit
+  ansible.builtin.template:
+    src: kiosk-session-watchdog.service.j2
+    dest: /etc/systemd/system/kiosk-session-watchdog.service
+    mode: "0644"
+  notify: Reload systemd
+  when: kiosk_session_watchdog | bool
+
+- name: Install kiosk session watchdog timer
+  ansible.builtin.template:
+    src: kiosk-session-watchdog.timer.j2
+    dest: /etc/systemd/system/kiosk-session-watchdog.timer
+    mode: "0644"
+  notify: Reload systemd
+  when: kiosk_session_watchdog | bool
+
+- name: Enable kiosk session watchdog timer
+  ansible.builtin.systemd:
+    name: kiosk-session-watchdog.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: kiosk_session_watchdog | bool
+
+- name: Disable kiosk session watchdog timer when opted out
+  ansible.builtin.systemd:
+    name: kiosk-session-watchdog.timer
+    enabled: false
+    state: stopped
+  when: not (kiosk_session_watchdog | bool)
+  failed_when: false
+
+- name: Force reboot after initial GUI/kiosk setup on RHEL 9+
+  ansible.builtin.debug:
+    msg: Forcing reboot so GDM autologin can establish the kiosk session
+  changed_when: true
+  notify: Reboot
+  when: kiosk_needs_first_gui_reboot | bool
+
 - name: Flush handlers (reboot or restart GDM if needed)
   ansible.builtin.meta: flush_handlers
+
+- name: Record successful first GUI reboot on RHEL 9+
+  ansible.builtin.file:
+    path: "{{ kiosk_first_gui_reboot_marker }}"
+    state: touch
+    mode: "0644"
+  when:
+    - ansible_facts['distribution_major_version'] | int >= 9
+    - kiosk_reboot | bool
