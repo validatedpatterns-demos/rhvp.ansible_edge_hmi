@@ -211,9 +211,10 @@
     - /home/kiosk/.local/state
 
 - name: Disable GNOME initial setup for kiosk user
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: file
+  ansible.builtin.copy:
+    dest: "{{ item }}"
+    content: ""
+    force: false
     mode: "0644"
     owner: kiosk
     group: kiosk
