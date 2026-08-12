@@ -38,12 +38,11 @@
     path: "{{ kiosk_first_gui_reboot_marker }}"
   register: kiosk_first_gui_reboot
 
-- name: Set whether RHEL 9+ still needs a first GUI reboot
+- name: Set whether a first GUI reboot is still required
   ansible.builtin.set_fact:
     kiosk_needs_first_gui_reboot: >-
       {{
-        (ansible_facts['distribution_major_version'] | int >= 9)
-        and (not kiosk_first_gui_reboot.stat.exists)
+        (not kiosk_first_gui_reboot.stat.exists)
         and (kiosk_reboot | bool)
       }}
 
@@ -170,12 +169,21 @@
     - ansible_facts['distribution_major_version'] | int >= 9
     - not kiosk_selected_session.stat.exists
 
-- name: Create gdm configuration for kiosk kiosk_mode
-  ansible.builtin.template:
-    src: custom.conf.j2
-    dest: /etc/gdm/custom.conf
-    mode: "0644"
-  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+- name: Verify RHEL 8 kiosk session desktop file exists
+  ansible.builtin.stat:
+    path: /usr/share/xsessions/com.redhat.Kiosk.desktop
+  register: kiosk_rhel8_session
+  when: ansible_facts['distribution_major_version'] | int < 9
+
+- name: Fail when RHEL 8 kiosk session desktop file is missing
+  ansible.builtin.fail:
+    msg: >-
+      RHEL 8 kiosk session com.redhat.Kiosk has no desktop file at
+      /usr/share/xsessions/com.redhat.Kiosk.desktop.
+      Install gnome-session-kiosk-session before configuring GDM.
+  when:
+    - ansible_facts['distribution_major_version'] | int < 9
+    - not kiosk_rhel8_session.stat.exists
 
 - name: Ensure kiosk group exists
   ansible.builtin.group:
@@ -209,6 +217,60 @@
   when: kiosk_password_status.stdout.split()[1] != 'NP'
   changed_when: kiosk_password_clear.rc == 0
   failed_when: kiosk_password_clear.rc != 0
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Unlock kiosk user account when password is locked
+  ansible.builtin.command:
+    cmd: passwd -u kiosk
+  register: kiosk_password_unlock
+  when: kiosk_password_status.stdout.split()[1] == 'LK'
+  changed_when: kiosk_password_unlock.rc == 0
+  failed_when: false
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Ensure AccountsService kiosk user file exists
+  ansible.builtin.copy:
+    dest: /var/lib/AccountsService/users/kiosk
+    content: |
+      [User]
+    force: false
+    mode: "0600"
+
+- name: Configure AccountsService session keys for kiosk user
+  ansible.builtin.lineinfile:
+    path: /var/lib/AccountsService/users/kiosk
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    insertafter: '^\[User\]'
+    mode: "0600"
+  loop:
+    - { key: Session, value: "{{ kiosk_session }}" }
+    - { key: SystemAccount, value: "false" }
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Configure AccountsService XSession for kiosk user on RHEL 8
+  ansible.builtin.lineinfile:
+    path: /var/lib/AccountsService/users/kiosk
+    regexp: '^XSession='
+    line: "XSession={{ kiosk_session }}"
+    insertafter: '^\[User\]'
+    mode: "0600"
+  when: ansible_facts['distribution_major_version'] | int < 9
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Remove AccountsService XSession override on RHEL 9 and newer
+  ansible.builtin.lineinfile:
+    path: /var/lib/AccountsService/users/kiosk
+    regexp: '^XSession='
+    state: absent
+  when: ansible_facts['distribution_major_version'] | int >= 9
+
+- name: Create gdm configuration for kiosk kiosk_mode
+  ansible.builtin.template:
+    src: custom.conf.j2
+    dest: /etc/gdm/custom.conf
+    mode: "0644"
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
 
 - name: Change default target to graphical.target
   ansible.builtin.file:
@@ -287,43 +349,6 @@
     owner: kiosk
     group: kiosk
 
-- name: Ensure AccountsService kiosk user file exists
-  ansible.builtin.copy:
-    dest: /var/lib/AccountsService/users/kiosk
-    content: |
-      [User]
-    force: false
-    mode: "0600"
-
-- name: Configure AccountsService session keys for kiosk user
-  ansible.builtin.lineinfile:
-    path: /var/lib/AccountsService/users/kiosk
-    regexp: "^{{ item.key }}="
-    line: "{{ item.key }}={{ item.value }}"
-    insertafter: '^\[User\]'
-    mode: "0600"
-  loop:
-    - { key: Session, value: "{{ kiosk_session }}" }
-    - { key: SystemAccount, value: "false" }
-  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
-
-- name: Configure AccountsService XSession for kiosk user on RHEL 8
-  ansible.builtin.lineinfile:
-    path: /var/lib/AccountsService/users/kiosk
-    regexp: '^XSession='
-    line: "XSession={{ kiosk_session }}"
-    insertafter: '^\[User\]'
-    mode: "0600"
-  when: ansible_facts['distribution_major_version'] | int < 9
-  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
-
-- name: Remove AccountsService XSession override on RHEL 9 and newer
-  ansible.builtin.lineinfile:
-    path: /var/lib/AccountsService/users/kiosk
-    regexp: '^XSession='
-    state: absent
-  when: ansible_facts['distribution_major_version'] | int >= 9
-
 - name: Ensure kiosk home directory ownership
   ansible.builtin.file:
     path: /home/kiosk
@@ -371,7 +396,7 @@
   when: not (kiosk_session_watchdog | bool)
   failed_when: false
 
-- name: Force reboot after initial GUI/kiosk setup on RHEL 9+
+- name: Force reboot after initial GUI/kiosk setup
   ansible.builtin.debug:
     msg: Forcing reboot so GDM autologin can establish the kiosk session
   changed_when: true
@@ -385,7 +410,7 @@
 - name: Flush handlers (reboot or restart GDM if needed)
   ansible.builtin.meta: flush_handlers
 
-- name: Record successful first GUI reboot on RHEL 9+
+- name: Record successful first GUI reboot
   ansible.builtin.copy:
     dest: "{{ kiosk_first_gui_reboot_marker }}"
     content: "completed\n"

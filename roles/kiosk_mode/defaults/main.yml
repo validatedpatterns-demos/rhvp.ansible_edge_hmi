@@ -28,7 +28,7 @@ rhsm_auto_attach: false
 kiosk_installonly_limit: 2
 kiosk_boot_usage_threshold: 70
 
-# Marker used to force one full reboot after first GUI/kiosk setup on RHEL 9+.
+# Marker used to force one full reboot after first GUI/kiosk setup.
 kiosk_state_dir: /var/lib/kiosk_mode
 kiosk_first_gui_reboot_marker: /var/lib/kiosk_mode/first-gui-reboot-complete
 
