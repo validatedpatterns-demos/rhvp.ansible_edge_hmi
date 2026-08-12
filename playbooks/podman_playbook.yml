@@ -10,6 +10,11 @@
     container_tag: "8.1"
     container_port_mapping: 8088:8088
     container_extra_params: --privileged -e GATEWAY_ADMIN_PASSWORD=redhat
+    container_healthcheck_cmd: >-
+      curl -sf --max-time 3 http://localhost:8088/StatusPing
+    container_healthcheck_interval: 30s
+    container_healthcheck_retries: 5
+    container_healthcheck_start_period: 120s
   tasks:
     - name: Import container_lifecycle role
       ansible.builtin.import_role:

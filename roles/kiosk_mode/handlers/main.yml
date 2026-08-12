@@ -1,4 +1,15 @@
 ---
 # handlers file for kiosk_mode
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
 - name: Reboot
   ansible.builtin.reboot:
+  when: kiosk_reboot | bool
+
+- name: Restart GDM
+  ansible.builtin.systemd:
+    name: gdm
+    state: restarted
+  when: kiosk_reboot | bool

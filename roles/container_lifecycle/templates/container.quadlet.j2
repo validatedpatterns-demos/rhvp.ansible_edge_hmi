@@ -19,6 +19,9 @@ PodmanArgs={{ container_extra_params }}
 HealthCmd={{ container_healthcheck_cmd }}
 HealthInterval={{ container_healthcheck_interval }}
 HealthRetries={{ container_healthcheck_retries }}
+HealthOnFailure={{ container_healthcheck_on_failure }}
+HealthStartPeriod={{ container_healthcheck_start_period }}
+HealthTimeout={{ container_healthcheck_timeout }}
 {% endif %}
 
 [Service]

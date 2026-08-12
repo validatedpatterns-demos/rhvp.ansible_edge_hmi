@@ -2,6 +2,13 @@
 # defaults file for kiosk_mode
 kiosk_port: 8088
 
+# When false, skip reboot and GDM restart handlers (useful for iterative runs).
+kiosk_reboot: true
+
+# HTTP path polled before launching Firefox. Override for app-specific
+# readiness endpoints (e.g. /StatusPing for Ignition).
+kiosk_ready_path: /
+
 # RHEL 8 kiosk packages and session configuration.
 kiosk_packages:
   - gnome-session-kiosk-session
@@ -15,3 +22,17 @@ kiosk_runtime_packages:
 # subscription-manager attach was removed in RHEL 9.5+/10 and Fedora 41+.
 # Registration alone is sufficient with Simple Content Access (SCA).
 rhsm_auto_attach: false
+
+# Keep this many installonly packages (kernels); prune older ones when /boot
+# usage reaches kiosk_boot_usage_threshold before dnf upgrade/install.
+kiosk_installonly_limit: 2
+kiosk_boot_usage_threshold: 70
+
+# Marker used to force one full reboot after first GUI/kiosk setup on RHEL 9+.
+kiosk_state_dir: /var/lib/kiosk_mode
+kiosk_first_gui_reboot_marker: /var/lib/kiosk_mode/first-gui-reboot-complete
+
+# Restart GDM (then reboot once) if the kiosk user has no session after boot.
+kiosk_session_watchdog: true
+kiosk_session_watchdog_boot_delay_sec: 180
+kiosk_session_watchdog_interval_sec: 300

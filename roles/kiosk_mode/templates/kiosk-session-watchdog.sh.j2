@@ -1,0 +1,36 @@
+#!/bin/bash
+# Restart GDM once, then reboot once, if the kiosk user has no session.
+set -euo pipefail
+
+STATE_DIR="{{ kiosk_state_dir }}"
+GDM_STAMP="${STATE_DIR}/watchdog-gdm-restarted"
+REBOOT_STAMP="${STATE_DIR}/watchdog-rebooted"
+
+mkdir -p "${STATE_DIR}"
+
+if ! systemctl is-active --quiet graphical.target; then
+  exit 0
+fi
+
+if ! systemctl is-active --quiet gdm; then
+  exit 0
+fi
+
+if loginctl list-sessions --no-legend 2>/dev/null | awk '{print $3}' | grep -qx kiosk; then
+  rm -f "${GDM_STAMP}" "${REBOOT_STAMP}"
+  exit 0
+fi
+
+if [ ! -f "${GDM_STAMP}" ]; then
+  touch "${GDM_STAMP}"
+  systemctl restart gdm
+  exit 0
+fi
+
+if [ ! -f "${REBOOT_STAMP}" ]; then
+  touch "${REBOOT_STAMP}"
+  systemctl reboot
+  exit 0
+fi
+
+exit 0
