@@ -379,7 +379,7 @@
   when: kiosk_needs_first_gui_reboot | bool
 
 - name: Ensure Ignition container is running before kiosk session handlers
-  ansible.builtin.import_role:
+  ansible.builtin.include_role:
     name: container_lifecycle
 
 - name: Flush handlers (reboot or restart GDM if needed)
