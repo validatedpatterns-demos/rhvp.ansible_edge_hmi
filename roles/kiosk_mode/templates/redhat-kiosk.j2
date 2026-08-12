@@ -3,6 +3,10 @@
 kiosk_page="http://localhost:{{ kiosk_port }}"
 kiosk_ready="http://localhost:{{ kiosk_port }}{{ kiosk_ready_path }}"
 
+if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
+	export MOZ_ENABLE_WAYLAND=1
+fi
+
 wait_for_service() {
 	while true; do
 		if /usr/bin/curl -sf --connect-timeout 2 "$kiosk_ready" >/dev/null 2>&1; then

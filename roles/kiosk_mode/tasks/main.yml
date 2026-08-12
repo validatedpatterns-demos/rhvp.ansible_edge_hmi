@@ -270,8 +270,25 @@
     mode: "0600"
   loop:
     - { key: Session, value: "{{ kiosk_session }}" }
-    - { key: XSession, value: "{{ kiosk_session }}" }
     - { key: SystemAccount, value: "false" }
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Configure AccountsService XSession for kiosk user on RHEL 8
+  ansible.builtin.lineinfile:
+    path: /var/lib/AccountsService/users/kiosk
+    regexp: '^XSession='
+    line: "XSession={{ kiosk_session }}"
+    insertafter: '^\[User\]'
+    mode: "0600"
+  when: ansible_facts['distribution_major_version'] | int < 9
+  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Remove AccountsService XSession override on RHEL 9 and newer
+  ansible.builtin.lineinfile:
+    path: /var/lib/AccountsService/users/kiosk
+    regexp: '^XSession='
+    state: absent
+  when: ansible_facts['distribution_major_version'] | int >= 9
 
 - name: Ensure kiosk home directory ownership
   ansible.builtin.file:
