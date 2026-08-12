@@ -252,12 +252,25 @@
     owner: kiosk
     group: kiosk
 
-- name: Configure session for kiosk username /var/lib/AccountsService/users/kiosk
-  ansible.builtin.template:
-    src: kiosk.conf.j2
+- name: Ensure AccountsService kiosk user file exists
+  ansible.builtin.copy:
     dest: /var/lib/AccountsService/users/kiosk
+    content: |
+      [User]
+    force: false
     mode: "0600"
-  notify: "{{ 'Reboot' if (kiosk_needs_first_gui_reboot | bool) else 'Restart GDM' }}"
+
+- name: Configure AccountsService session keys for kiosk user
+  ansible.builtin.lineinfile:
+    path: /var/lib/AccountsService/users/kiosk
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    insertafter: '^\[User\]'
+    mode: "0600"
+  loop:
+    - { key: Session, value: "{{ kiosk_session }}" }
+    - { key: XSession, value: "{{ kiosk_session }}" }
+    - { key: SystemAccount, value: "false" }
 
 - name: Ensure kiosk home directory ownership
   ansible.builtin.file:
@@ -317,8 +330,9 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Record successful first GUI reboot on RHEL 9+
-  ansible.builtin.file:
-    path: "{{ kiosk_first_gui_reboot_marker }}"
-    state: touch
+  ansible.builtin.copy:
+    dest: "{{ kiosk_first_gui_reboot_marker }}"
+    content: "completed\n"
     mode: "0644"
+    force: false
   when: kiosk_needs_first_gui_reboot | bool
